@@ -405,6 +405,137 @@ needed, roughly ordered by dependency:
 **Total: The daemon work is the bottleneck.** Without upstream Acorn changes,
 Tiers 2 and 3 cannot proceed beyond mock/test implementations.
 
+### Update: PR pdoronila/acorn#2
+
+PR https://github.com/pdoronila/acorn/pull/2 implements **all P0-P2 and P4
+operations** (18/18 commands). Once merged, the only remaining gap is P3
+(streaming exec for long-running interactive Claude Code sessions inside
+containers). The PR also updates socket permissions from `0o700` to `0o766`
+so containers can access the daemon socket.
+
+With this PR, Option C becomes viable for stacks and container lifecycle.
+The `exec_container` handler is still request/response (not streaming), so
+running Claude Code sessions inside containers via exec would need a follow-up
+streaming protocol extension — but that use case is covered by Options A/B
+via FLAME pools.
+
+## 8. Acorn Daemon Implementation Roadmap
+
+The apple-slicer side (socket client, stacks context, CLI adapter, schemas) is
+**structurally complete** — every callback is implemented and sends correct JSON
+payloads. The blocker is exclusively the Acorn daemon not processing these
+commands.
+
+### Operations Matrix: What to Build in the Daemon
+
+Priority order reflects Symphony's needs. Each operation maps 1:1 to an existing
+socket client function that already sends the correct `{"cmd":"..."}` payload.
+
+#### P0: Container Lifecycle (unblocks FLAME + basic stack work)
+
+| Daemon Command | Socket Client | What It Does | Complexity |
+|---|---|---|---|
+| `run_container` | `AcornSocketClient.run_container/2` | Spawn a single container from image + env + volumes | Medium |
+| `stop_container` | `AcornSocketClient.stop_container/3` | Graceful shutdown (SIGTERM → SIGKILL after timeout) | Low |
+| `inspect_container` | `AcornSocketClient.inspect_container/2` | Return container state, IP, ports, resource usage | Medium |
+| `list_containers` | `AcornSocketClient.list_containers/1` | Enumerate containers for a project | Low |
+| `remove_container` | `AcornSocketClient.remove_container/2` | Delete stopped container and its resources | Low |
+| `container_stats` | `AcornSocketClient.container_stats/2` | CPU/memory/network stats snapshot | Medium |
+
+**Expected request/response format** (already sent by socket client):
+```json
+// Request
+{"cmd":"run_container","project":"symphony-agent-1","image":"flame-runner-claude:latest","env":{"ANTHROPIC_API_KEY":"..."},"volumes":["~/.claude:/home/.claude:ro"]}
+
+// Response
+{"status":"ok","container_id":"abc123","ip":"192.168.64.10","state":"running"}
+```
+
+#### P1: Stack Orchestration (unblocks compose-style multi-service deployment)
+
+| Daemon Command | Socket Client | What It Does | Complexity |
+|---|---|---|---|
+| `spawn_stack` | `AcornSocketClient.spawn_stack/2` | Bring up all services in dependency order | High |
+| `teardown_stack` | `AcornSocketClient.teardown_stack/2` | Shut down all services in reverse dependency order | Medium |
+| `stack_status` | `AcornSocketClient.stack_status/1` | Aggregate health of all services in a stack | Medium |
+| `stack_service_discovery` | `AcornSocketClient.stack_service_discovery/1` | Return IP/port map for all services | Medium |
+| `list_stacks` | `AcornSocketClient.list_stacks/1` | Enumerate active stacks for a project | Low |
+| `list_stack_templates` | `AcornSocketClient.list_stack_templates/0` | List available compose templates | Low |
+
+**Expected request/response format**:
+```json
+// spawn_stack request
+{"cmd":"spawn_stack","project":"symphony-worker-a3f8","compose_config":{"worker":{"image":"flame-runner-claude:latest","env":{}},"postgres":{"image":"postgres:16"}}}
+
+// spawn_stack response
+{"status":"ok","stack_id":"stack-abc","services":{"worker":{"state":"running","ip":"192.168.64.10"},"postgres":{"state":"running","ip":"192.168.64.11"}}}
+
+// stack_service_discovery response
+{"status":"ok","services":{"worker":"192.168.64.10","postgres":"192.168.64.11"}}
+```
+
+#### P2: Scaling (unblocks multi-agent concurrency)
+
+| Daemon Command | Socket Client | What It Does | Complexity |
+|---|---|---|---|
+| `scale_service` | `AcornSocketClient.scale_service/3` | Set replica count for a service within a stack | High |
+| `list_service_instances` | `AcornSocketClient.list_service_instances/2` | Enumerate instances of a scaled service | Medium |
+
+#### P3: Streaming Exec (unblocks running Claude Code inside containers)
+
+This is a **protocol extension**, not just a new command. The current
+request/response model (send one JSON line, receive one JSON line, 30s timeout)
+cannot support interactive sessions.
+
+**What's needed:**
+- New `exec_stream` command that upgrades the socket to bidirectional mode
+- stdin forwarding: host → container (send prompts to Claude)
+- stdout/stderr forwarding: container → host (receive Claude output)
+- Configurable timeout (minutes to hours, not 30s)
+- Session multiplexing (multiple concurrent execs per socket)
+- Clean shutdown signaling (SIGTERM to exec'd process)
+
+**Protocol sketch:**
+```json
+// Initiate streaming exec
+{"cmd":"exec_stream","project":"p","name":"worker","command":["claude","--print","--model","sonnet"],"timeout_ms":3600000}
+
+// Response: session ID for multiplexing
+{"status":"ok","session_id":"sess-xyz","type":"exec_stream"}
+
+// Subsequent frames (bidirectional, tagged by session_id):
+{"session_id":"sess-xyz","type":"stdout","data":"...claude output..."}
+{"session_id":"sess-xyz","type":"stdin","data":"...input to claude..."}
+{"session_id":"sess-xyz","type":"exit","code":0}
+```
+
+**Complexity: High.** This is equivalent to building `docker exec -it` or
+`kubectl exec`. However, it is only needed for Option C — Options A and B
+(FLAME pool / REST API) work without it.
+
+#### P4: Tunnels (nice-to-have for remote access)
+
+| Daemon Command | Socket Client | What It Does | Complexity |
+|---|---|---|---|
+| `expose_service` | `AcornSocketClient.expose_service/4` | Create Cloudflare tunnel to a service | High |
+| `unexpose_service` | `AcornSocketClient.unexpose_service/3` | Remove tunnel | Low |
+| `list_tunnels` | `AcornSocketClient.list_tunnels/1` | Enumerate active tunnels | Low |
+
+### apple-slicer Readiness Per Priority
+
+| Priority | Daemon Status | Socket Client | Stacks Context | Ready When Daemon Ships? |
+|---|---|---|---|---|
+| P0: Container Lifecycle | Not implemented | Sends correct payloads | N/A (direct container use) | **Yes** |
+| P1: Stack Orchestration | Not implemented | Sends correct payloads | `deploy_template`, `teardown_instance`, `refresh_instance_status` ready | **Yes** |
+| P2: Scaling | Not implemented | Sends correct payloads | Would need new functions | Mostly |
+| P3: Streaming Exec | Protocol doesn't exist | Would need new `exec_stream` function | Would need streaming runner | No — needs client-side work too |
+| P4: Tunnels | Unknown | Sends correct payloads | `expose/unexpose_instance_service` ready | **Yes** |
+
+**Key takeaway:** For P0-P1 (container lifecycle + stacks), the apple-slicer
+side is complete and will work the moment the daemon implements those commands.
+No apple-slicer code changes needed. P3 (streaming exec) requires work on both
+sides.
+
 ## Appendix: Key Files Referenced
 
 | File | Location |
