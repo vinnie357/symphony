@@ -129,6 +129,8 @@ defmodule SymphonyElixir.TestSupport do
           claude_permission_mode: nil,
           claude_allowed_tools: nil,
           claude_disallowed_tools: nil,
+          gemini_command: nil,
+          gemini_model: nil,
           server_port: nil,
           server_host: nil,
           prompt: @workflow_prompt
@@ -173,6 +175,8 @@ defmodule SymphonyElixir.TestSupport do
     claude_permission_mode = Keyword.get(config, :claude_permission_mode)
     claude_allowed_tools = Keyword.get(config, :claude_allowed_tools)
     claude_disallowed_tools = Keyword.get(config, :claude_disallowed_tools)
+    gemini_command = Keyword.get(config, :gemini_command)
+    gemini_model = Keyword.get(config, :gemini_model)
     server_port = Keyword.get(config, :server_port)
     server_host = Keyword.get(config, :server_host)
     prompt = Keyword.get(config, :prompt)
@@ -208,6 +212,7 @@ defmodule SymphonyElixir.TestSupport do
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         execution_yaml(execution_backend, execution_model, execution_max_turns, execution_timeout_ms),
         claude_yaml(claude_command, claude_output_format, claude_permission_mode, claude_allowed_tools, claude_disallowed_tools),
+        gemini_yaml(gemini_command, gemini_model),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
         "---",
@@ -289,6 +294,18 @@ defmodule SymphonyElixir.TestSupport do
       permission_mode && "  permission_mode: #{yaml_value(permission_mode)}",
       allowed_tools && "  allowed_tools: #{yaml_value(allowed_tools)}",
       disallowed_tools && "  disallowed_tools: #{yaml_value(disallowed_tools)}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp gemini_yaml(nil, nil), do: nil
+
+  defp gemini_yaml(command, model) do
+    [
+      "gemini:",
+      command && "  command: #{yaml_value(command)}",
+      model && "  model: #{yaml_value(model)}"
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")

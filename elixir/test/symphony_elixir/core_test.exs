@@ -118,6 +118,22 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.claude_disallowed_tools() == ["Bash"]
   end
 
+  test "gemini config defaults" do
+    write_workflow_file!(Workflow.workflow_file_path())
+    assert Config.gemini_command() == "gemini"
+    assert Config.gemini_model() == nil
+  end
+
+  test "gemini config parses from WORKFLOW.md" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      gemini_command: "gemini --sandbox",
+      gemini_model: "gemini-2.5-pro"
+    )
+
+    assert Config.gemini_command() == "gemini --sandbox"
+    assert Config.gemini_model() == "gemini-2.5-pro"
+  end
+
   test "current WORKFLOW.md file is valid and complete" do
     original_workflow_path = Workflow.workflow_file_path()
     on_exit(fn -> Workflow.set_workflow_file_path(original_workflow_path) end)

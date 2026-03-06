@@ -35,6 +35,8 @@ defmodule SymphonyElixir.Config do
   @default_claude_command "claude"
   @default_claude_output_format "stream-json"
   @default_claude_permission_mode "plan"
+  @default_gemini_command "gemini"
+  @default_gemini_model nil
   @default_codex_command "codex app-server"
   @default_codex_turn_timeout_ms 3_600_000
   @default_codex_read_timeout_ms 5_000
@@ -144,6 +146,14 @@ defmodule SymphonyElixir.Config do
                                    type: {:list, :string},
                                    default: []
                                  ]
+                               ]
+                             ],
+                             gemini: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 command: [type: :string, default: @default_gemini_command],
+                                 model: [type: {:or, [:string, nil]}, default: @default_gemini_model]
                                ]
                              ],
                              codex: [
@@ -364,6 +374,16 @@ defmodule SymphonyElixir.Config do
     get_in(validated_workflow_options(), [:claude, :disallowed_tools])
   end
 
+  @spec gemini_command() :: String.t()
+  def gemini_command do
+    get_in(validated_workflow_options(), [:gemini, :command])
+  end
+
+  @spec gemini_model() :: String.t() | nil
+  def gemini_model do
+    get_in(validated_workflow_options(), [:gemini, :model])
+  end
+
   @spec codex_command() :: String.t()
   def codex_command do
     get_in(validated_workflow_options(), [:codex, :command])
@@ -543,6 +563,7 @@ defmodule SymphonyElixir.Config do
       agent: extract_agent_options(section_map(config, "agent")),
       execution: extract_execution_options(section_map(config, "execution")),
       claude: extract_claude_options(section_map(config, "claude")),
+      gemini: extract_gemini_options(section_map(config, "gemini")),
       codex: extract_codex_options(section_map(config, "codex")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
@@ -596,6 +617,12 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:permission_mode, scalar_string_value(Map.get(section, "permission_mode")))
     |> put_if_present(:allowed_tools, csv_value(Map.get(section, "allowed_tools")))
     |> put_if_present(:disallowed_tools, csv_value(Map.get(section, "disallowed_tools")))
+  end
+
+  defp extract_gemini_options(section) do
+    %{}
+    |> put_if_present(:command, command_value(Map.get(section, "command")))
+    |> put_if_present(:model, scalar_string_value(Map.get(section, "model")))
   end
 
   defp extract_codex_options(section) do
