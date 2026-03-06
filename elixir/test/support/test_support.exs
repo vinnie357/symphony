@@ -211,7 +211,10 @@ defmodule SymphonyElixir.TestSupport do
         "  stall_timeout_ms: #{yaml_value(codex_stall_timeout_ms)}",
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         execution_yaml(execution_backend, execution_model, execution_max_turns, execution_timeout_ms),
-        claude_yaml(claude_command, claude_output_format, claude_permission_mode, claude_allowed_tools, claude_disallowed_tools),
+        claude_yaml(
+          claude_command, claude_output_format, claude_permission_mode,
+          claude_allowed_tools, claude_disallowed_tools
+        ),
         gemini_yaml(gemini_command, gemini_model),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
