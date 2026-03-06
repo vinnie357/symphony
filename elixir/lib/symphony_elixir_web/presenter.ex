@@ -100,6 +100,8 @@ defmodule SymphonyElixirWeb.Presenter do
       issue_identifier: entry.identifier,
       state: entry.state,
       session_id: entry.session_id,
+      backend_name: Map.get(entry, :backend_name),
+      execution_model: Map.get(entry, :execution_model),
       turn_count: Map.get(entry, :turn_count, 0),
       last_event: entry.last_codex_event,
       last_message: summarize_message(entry.last_codex_message),
