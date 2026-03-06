@@ -132,6 +132,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
               <table class="data-table data-table-running">
                 <colgroup>
                   <col style="width: 12rem;" />
+                  <col style="width: 9rem;" />
                   <col style="width: 8rem;" />
                   <col style="width: 9rem;" />
                   <col style="width: 7.5rem;" />
@@ -142,6 +143,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
                 <thead>
                   <tr>
                     <th>Issue</th>
+                    <th>Project</th>
                     <th>State</th>
                     <th>Backend</th>
                     <th>Session</th>
@@ -157,6 +159,9 @@ defmodule SymphonyElixirWeb.DashboardLive do
                         <span class="issue-id"><%= entry.issue_identifier %></span>
                         <a class="issue-link" href={"/api/v1/#{entry.issue_identifier}"}>JSON details</a>
                       </div>
+                    </td>
+                    <td>
+                      <span class="muted"><%= entry.project_slug || "&mdash;" %></span>
                     </td>
                     <td>
                       <span class={state_badge_class(entry.state)}>

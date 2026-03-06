@@ -1,3 +1,15 @@
 [tools]
 erlang = "28"
 elixir = "1.19.5-otp-28"
+
+[tasks.web]
+run = "mix symphony.web"
+description = "Start Phoenix web dashboard"
+
+[tasks.tui]
+run = "mix symphony.tui"
+description = "Start terminal status dashboard"
+
+[tasks.ci]
+run = "mix test --warnings-as-errors && mix credo --strict"
+description = "Run tests and linting"

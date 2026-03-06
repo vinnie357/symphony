@@ -99,6 +99,7 @@ defmodule SymphonyElixirWeb.Presenter do
       issue_id: entry.issue_id,
       issue_identifier: entry.identifier,
       state: entry.state,
+      project_slug: Map.get(entry, :project_slug),
       session_id: entry.session_id,
       backend_name: Map.get(entry, :backend_name),
       execution_model: Map.get(entry, :execution_model),

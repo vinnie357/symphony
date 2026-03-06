@@ -140,7 +140,9 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
 
   @impl SymphonyElixir.Backend
   def stop_session(%{run_id: run_id, req: req, status: status}) do
-    if status not in @terminal_statuses do
+    if status in @terminal_statuses do
+      :ok
+    else
       case Req.delete(req, url: "/api/symphony/runs/#{run_id}") do
         {:ok, %Req.Response{status: 200}} ->
           Logger.info("apple-slicer run cancelled: run_id=#{run_id}")
@@ -168,8 +170,6 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
 
           :ok
       end
-    else
-      :ok
     end
   end
 
@@ -340,45 +340,7 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
 
       case get_run(session) do
         {:ok, run} ->
-          status = run["status"]
-          updated_session = %{session | status: status}
-
-          emit_message(on_message, :run_status_update, %{
-            run_id: session.run_id,
-            status: status,
-            turn_count: run["turn_count"],
-            codex_input_tokens: run["codex_input_tokens"],
-            codex_output_tokens: run["codex_output_tokens"],
-            codex_total_tokens: run["codex_total_tokens"],
-            last_codex_event: run["last_codex_event"],
-            runtime_seconds: run["runtime_seconds"]
-          })
-
-          case status do
-            "completed" ->
-              Logger.info("apple-slicer run completed: run_id=#{session.run_id}")
-
-              {:ok,
-               %{
-                 result: :turn_completed,
-                 session_id: run["session_id"],
-                 thread_id: run["session_id"],
-                 turn_id: to_string(run["turn_count"]),
-                 run: run
-               }}
-
-            "failed" ->
-              error = run["error"] || "unknown_error"
-              Logger.warning("apple-slicer run failed: run_id=#{session.run_id} error=#{error}")
-              {:error, {:run_failed, error}}
-
-            "cancelled" ->
-              Logger.info("apple-slicer run cancelled: run_id=#{session.run_id}")
-              {:error, {:run_cancelled, run}}
-
-            _active ->
-              do_poll(updated_session, on_message, poll_interval, deadline)
-          end
+          handle_poll_result(session, run, on_message, poll_interval, deadline)
 
         {:error, reason} ->
           Logger.warning(
@@ -388,6 +350,48 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
           # Retry polling on transient errors
           do_poll(session, on_message, poll_interval, deadline)
       end
+    end
+  end
+
+  defp handle_poll_result(session, run, on_message, poll_interval, deadline) do
+    status = run["status"]
+    updated_session = %{session | status: status}
+
+    emit_message(on_message, :run_status_update, %{
+      run_id: session.run_id,
+      status: status,
+      turn_count: run["turn_count"],
+      codex_input_tokens: run["codex_input_tokens"],
+      codex_output_tokens: run["codex_output_tokens"],
+      codex_total_tokens: run["codex_total_tokens"],
+      last_codex_event: run["last_codex_event"],
+      runtime_seconds: run["runtime_seconds"]
+    })
+
+    case status do
+      "completed" ->
+        Logger.info("apple-slicer run completed: run_id=#{session.run_id}")
+
+        {:ok,
+         %{
+           result: :turn_completed,
+           session_id: run["session_id"],
+           thread_id: run["session_id"],
+           turn_id: to_string(run["turn_count"]),
+           run: run
+         }}
+
+      "failed" ->
+        error = run["error"] || "unknown_error"
+        Logger.warning("apple-slicer run failed: run_id=#{session.run_id} error=#{error}")
+        {:error, {:run_failed, error}}
+
+      "cancelled" ->
+        Logger.info("apple-slicer run cancelled: run_id=#{session.run_id}")
+        {:error, {:run_cancelled, run}}
+
+      _active ->
+        do_poll(updated_session, on_message, poll_interval, deadline)
     end
   end
 
