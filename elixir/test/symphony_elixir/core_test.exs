@@ -212,6 +212,22 @@ defmodule SymphonyElixir.CoreTest do
     assert Config.settings!().tracker.assignee == env_assignee
   end
 
+  test "linear project slug resolves from LINEAR_PROJECT_SLUG env var" do
+    previous_linear_project_slug = System.get_env("LINEAR_PROJECT_SLUG")
+    env_slug = "test-project-slug"
+
+    on_exit(fn -> restore_env("LINEAR_PROJECT_SLUG", previous_linear_project_slug) end)
+    System.put_env("LINEAR_PROJECT_SLUG", env_slug)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_project_slug: nil,
+      tracker_api_token: "token",
+      codex_command: "/bin/sh app-server"
+    )
+
+    assert Config.linear_project_slug() == env_slug
+  end
+
   test "workflow file path defaults to WORKFLOW.md in the current working directory when app env is unset" do
     original_workflow_path = Workflow.workflow_file_path()
 

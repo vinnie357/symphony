@@ -102,6 +102,7 @@ defmodule SymphonyElixirWeb.Presenter do
       state: entry.state,
       worker_host: Map.get(entry, :worker_host),
       workspace_path: Map.get(entry, :workspace_path),
+      project_slug: Map.get(entry, :project_slug),
       session_id: entry.session_id,
       backend_name: Map.get(entry, :backend_name),
       execution_model: Map.get(entry, :execution_model),
