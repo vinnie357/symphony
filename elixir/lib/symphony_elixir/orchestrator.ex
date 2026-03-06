@@ -719,6 +719,8 @@ defmodule SymphonyElixir.Orchestrator do
             codex_last_reported_output_tokens: 0,
             codex_last_reported_total_tokens: 0,
             turn_count: 0,
+            backend_name: nil,
+            execution_model: nil,
             retry_attempt: normalize_retry_attempt(attempt),
             started_at: DateTime.utc_now()
           })
@@ -1122,6 +1124,8 @@ defmodule SymphonyElixir.Orchestrator do
           last_codex_timestamp: metadata.last_codex_timestamp,
           last_codex_message: metadata.last_codex_message,
           last_codex_event: metadata.last_codex_event,
+          backend_name: Map.get(metadata, :backend_name),
+          execution_model: Map.get(metadata, :execution_model),
           runtime_seconds: running_seconds(metadata.started_at, now)
         }
       end)
@@ -1193,11 +1197,25 @@ defmodule SymphonyElixir.Orchestrator do
         codex_last_reported_input_tokens: max(last_reported_input, token_delta.input_reported),
         codex_last_reported_output_tokens: max(last_reported_output, token_delta.output_reported),
         codex_last_reported_total_tokens: max(last_reported_total, token_delta.total_reported),
-        turn_count: turn_count_for_update(turn_count, running_entry.session_id, update)
+        turn_count: turn_count_for_update(turn_count, running_entry.session_id, update),
+        backend_name: backend_name_for_update(running_entry, update),
+        execution_model: execution_model_for_update(running_entry, update)
       }),
       token_delta
     }
   end
+
+  defp backend_name_for_update(_entry, %{event: :backend_started, backend_name: name})
+       when is_binary(name),
+       do: name
+
+  defp backend_name_for_update(entry, _update), do: Map.get(entry, :backend_name)
+
+  defp execution_model_for_update(_entry, %{event: :backend_started, execution_model: model})
+       when is_binary(model),
+       do: model
+
+  defp execution_model_for_update(entry, _update), do: Map.get(entry, :execution_model)
 
   defp codex_app_server_pid_for_update(_existing, %{codex_app_server_pid: pid})
        when is_binary(pid),

@@ -351,6 +351,8 @@ defmodule SymphonyElixir.ExtensionsTest do
                  "worker_host" => nil,
                  "workspace_path" => nil,
                  "session_id" => "thread-http",
+                 "backend_name" => "Claude",
+                 "execution_model" => "claude-sonnet-4-20250514",
                  "turn_count" => 7,
                  "last_event" => "notification",
                  "last_message" => "rendered",
@@ -699,6 +701,8 @@ defmodule SymphonyElixir.ExtensionsTest do
           codex_input_tokens: 4,
           codex_output_tokens: 8,
           codex_total_tokens: 12,
+          backend_name: "Claude",
+          execution_model: "claude-sonnet-4-20250514",
           started_at: DateTime.utc_now()
         }
       ],

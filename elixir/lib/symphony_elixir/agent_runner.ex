@@ -98,6 +98,13 @@ defmodule SymphonyElixir.AgentRunner do
 
     with {:ok, backend} <- AgentRouter.resolve_backend(issue),
          {:ok, session} <- backend.start_session(issue, workspace, %{}) do
+      send_codex_update(codex_update_recipient, issue, %{
+        event: :backend_started,
+        timestamp: DateTime.utc_now(),
+        backend_name: backend_display_name(backend),
+        execution_model: Config.execution_model()
+      })
+
       ctx = %{
         backend: backend,
         session: session,
@@ -236,6 +243,17 @@ defmodule SymphonyElixir.AgentRunner do
     state_name
     |> String.trim()
     |> String.downcase()
+  end
+
+  @backend_display_names %{
+    SymphonyElixir.Backends.Claude => "Claude",
+    SymphonyElixir.Backends.Codex => "Codex",
+    SymphonyElixir.Backends.Gemini => "Gemini",
+    SymphonyElixir.Backends.AppleSlicerAPI => "Apple Slicer"
+  }
+
+  defp backend_display_name(module) when is_atom(module) do
+    Map.get(@backend_display_names, module, inspect(module))
   end
 
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
