@@ -18,8 +18,8 @@ defmodule SymphonyElixir.Backends.Claude do
   alias SymphonyElixir.Config
 
   @impl true
-  def start_session(_issue, workspace, _config) do
-    {:ok, %{workspace: workspace}}
+  def start_session(_issue, workspace, config) do
+    {:ok, %{workspace: workspace, skills_repo: Map.get(config, :skills_repo)}}
   end
 
   @impl true
@@ -32,8 +32,10 @@ defmodule SymphonyElixir.Backends.Claude do
     output_format = Config.claude_output_format()
     model = Config.execution_model()
 
+    skills_repo = session[:skills_repo]
+
     args =
-      build_args(prompt, permission_mode, output_format, model)
+      build_args(prompt, permission_mode, output_format, model, skills_repo)
 
     env = build_env(workspace)
 
@@ -57,7 +59,7 @@ defmodule SymphonyElixir.Backends.Claude do
   @impl true
   def stop_session(_session), do: :ok
 
-  defp build_args(prompt, permission_mode, output_format, model) do
+  defp build_args(prompt, permission_mode, output_format, model, skills_repo) do
     args = ["--print", "--output-format", output_format]
 
     args =
@@ -70,6 +72,13 @@ defmodule SymphonyElixir.Backends.Claude do
     args =
       if model do
         args ++ ["--model", model]
+      else
+        args
+      end
+
+    args =
+      if skills_repo do
+        args ++ ["--add-skill-repo", skills_repo]
       else
         args
       end
