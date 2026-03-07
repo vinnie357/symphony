@@ -120,6 +120,17 @@ defmodule SymphonyElixir.TestSupport do
           observability_enabled: true,
           observability_refresh_ms: 1_000,
           observability_render_interval_ms: 16,
+          execution_backend: nil,
+          execution_model: nil,
+          execution_max_turns: nil,
+          execution_timeout_ms: nil,
+          claude_command: nil,
+          claude_output_format: nil,
+          claude_permission_mode: nil,
+          claude_allowed_tools: nil,
+          claude_disallowed_tools: nil,
+          gemini_command: nil,
+          gemini_model: nil,
           server_port: nil,
           server_host: nil,
           prompt: @workflow_prompt
@@ -155,6 +166,17 @@ defmodule SymphonyElixir.TestSupport do
     observability_enabled = Keyword.get(config, :observability_enabled)
     observability_refresh_ms = Keyword.get(config, :observability_refresh_ms)
     observability_render_interval_ms = Keyword.get(config, :observability_render_interval_ms)
+    execution_backend = Keyword.get(config, :execution_backend)
+    execution_model = Keyword.get(config, :execution_model)
+    execution_max_turns = Keyword.get(config, :execution_max_turns)
+    execution_timeout_ms = Keyword.get(config, :execution_timeout_ms)
+    claude_command = Keyword.get(config, :claude_command)
+    claude_output_format = Keyword.get(config, :claude_output_format)
+    claude_permission_mode = Keyword.get(config, :claude_permission_mode)
+    claude_allowed_tools = Keyword.get(config, :claude_allowed_tools)
+    claude_disallowed_tools = Keyword.get(config, :claude_disallowed_tools)
+    gemini_command = Keyword.get(config, :gemini_command)
+    gemini_model = Keyword.get(config, :gemini_model)
     server_port = Keyword.get(config, :server_port)
     server_host = Keyword.get(config, :server_host)
     prompt = Keyword.get(config, :prompt)
@@ -188,6 +210,12 @@ defmodule SymphonyElixir.TestSupport do
         "  read_timeout_ms: #{yaml_value(codex_read_timeout_ms)}",
         "  stall_timeout_ms: #{yaml_value(codex_stall_timeout_ms)}",
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
+        execution_yaml(execution_backend, execution_model, execution_max_turns, execution_timeout_ms),
+        claude_yaml(
+          claude_command, claude_output_format, claude_permission_mode,
+          claude_allowed_tools, claude_disallowed_tools
+        ),
+        gemini_yaml(gemini_command, gemini_model),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
         "---",
@@ -242,6 +270,47 @@ defmodule SymphonyElixir.TestSupport do
       "  refresh_ms: #{yaml_value(refresh_ms)}",
       "  render_interval_ms: #{yaml_value(render_interval_ms)}"
     ]
+    |> Enum.join("\n")
+  end
+
+  defp execution_yaml(nil, nil, nil, nil), do: nil
+
+  defp execution_yaml(backend, model, max_turns, timeout_ms) do
+    [
+      "execution:",
+      backend && "  backend: #{yaml_value(backend)}",
+      model && "  model: #{yaml_value(model)}",
+      max_turns && "  max_turns: #{yaml_value(max_turns)}",
+      timeout_ms && "  timeout_ms: #{yaml_value(timeout_ms)}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp claude_yaml(nil, nil, nil, nil, nil), do: nil
+
+  defp claude_yaml(command, output_format, permission_mode, allowed_tools, disallowed_tools) do
+    [
+      "claude:",
+      command && "  command: #{yaml_value(command)}",
+      output_format && "  output_format: #{yaml_value(output_format)}",
+      permission_mode && "  permission_mode: #{yaml_value(permission_mode)}",
+      allowed_tools && "  allowed_tools: #{yaml_value(allowed_tools)}",
+      disallowed_tools && "  disallowed_tools: #{yaml_value(disallowed_tools)}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
+  end
+
+  defp gemini_yaml(nil, nil), do: nil
+
+  defp gemini_yaml(command, model) do
+    [
+      "gemini:",
+      command && "  command: #{yaml_value(command)}",
+      model && "  model: #{yaml_value(model)}"
+    ]
+    |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
 

@@ -23,14 +23,38 @@ defmodule SymphonyElixir.Application do
   def start(_type, _args) do
     :ok = SymphonyElixir.LogFile.configure()
 
-    children = [
-      {Phoenix.PubSub, name: SymphonyElixir.PubSub},
-      {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
-      SymphonyElixir.WorkflowStore,
-      SymphonyElixir.Orchestrator,
-      SymphonyElixir.HttpServer,
-      SymphonyElixir.StatusDashboard
-    ]
+    mode = Application.get_env(:symphony_elixir, :mode, :full)
+
+    children =
+      case mode do
+        :web ->
+          [
+            {Phoenix.PubSub, name: SymphonyElixir.PubSub},
+            {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
+            SymphonyElixir.WorkflowStore,
+            SymphonyElixir.Orchestrator,
+            SymphonyElixir.HttpServer
+          ]
+
+        :tui ->
+          [
+            {Phoenix.PubSub, name: SymphonyElixir.PubSub},
+            {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
+            SymphonyElixir.WorkflowStore,
+            SymphonyElixir.Orchestrator,
+            SymphonyElixir.StatusDashboard
+          ]
+
+        _full ->
+          [
+            {Phoenix.PubSub, name: SymphonyElixir.PubSub},
+            {Task.Supervisor, name: SymphonyElixir.TaskSupervisor},
+            SymphonyElixir.WorkflowStore,
+            SymphonyElixir.Orchestrator,
+            SymphonyElixir.HttpServer,
+            SymphonyElixir.StatusDashboard
+          ]
+      end
 
     Supervisor.start_link(
       children,

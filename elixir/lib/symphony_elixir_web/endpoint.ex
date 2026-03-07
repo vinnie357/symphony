@@ -16,6 +16,10 @@ defmodule SymphonyElixirWeb.Endpoint do
     longpoll: false
   )
 
+  if Mix.env() == :dev do
+    plug Tidewave
+  end
+
   plug(Plug.RequestId)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
 

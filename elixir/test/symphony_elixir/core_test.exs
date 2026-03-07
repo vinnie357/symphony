@@ -71,6 +71,69 @@ defmodule SymphonyElixir.CoreTest do
     assert {:error, {:unsupported_tracker_kind, "123"}} = Config.validate!()
   end
 
+  test "execution config defaults to codex backend" do
+    write_workflow_file!(Workflow.workflow_file_path())
+    assert Config.execution_backend() == "codex"
+    assert Config.execution_model() == nil
+    assert Config.execution_max_turns() == 20
+    assert Config.execution_timeout_ms() == 3_600_000
+  end
+
+  test "execution config parses from WORKFLOW.md" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      execution_backend: "claude-cli",
+      execution_model: "claude-sonnet-4-20250514",
+      execution_max_turns: 10,
+      execution_timeout_ms: 1_800_000
+    )
+
+    assert Config.execution_backend() == "claude-cli"
+    assert Config.execution_model() == "claude-sonnet-4-20250514"
+    assert Config.execution_max_turns() == 10
+    assert Config.execution_timeout_ms() == 1_800_000
+  end
+
+  test "claude config defaults" do
+    write_workflow_file!(Workflow.workflow_file_path())
+    assert Config.claude_command() == "claude"
+    assert Config.claude_output_format() == "stream-json"
+    assert Config.claude_permission_mode() == "plan"
+    assert Config.claude_allowed_tools() == []
+    assert Config.claude_disallowed_tools() == []
+  end
+
+  test "claude config parses from WORKFLOW.md" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      claude_command: "claude --model opus",
+      claude_output_format: "json",
+      claude_permission_mode: "dangerously-skip",
+      claude_allowed_tools: ["Read", "Write"],
+      claude_disallowed_tools: ["Bash"]
+    )
+
+    assert Config.claude_command() == "claude --model opus"
+    assert Config.claude_output_format() == "json"
+    assert Config.claude_permission_mode() == "dangerously-skip"
+    assert Config.claude_allowed_tools() == ["Read", "Write"]
+    assert Config.claude_disallowed_tools() == ["Bash"]
+  end
+
+  test "gemini config defaults" do
+    write_workflow_file!(Workflow.workflow_file_path())
+    assert Config.gemini_command() == "gemini"
+    assert Config.gemini_model() == nil
+  end
+
+  test "gemini config parses from WORKFLOW.md" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      gemini_command: "gemini --sandbox",
+      gemini_model: "gemini-2.5-pro"
+    )
+
+    assert Config.gemini_command() == "gemini --sandbox"
+    assert Config.gemini_model() == "gemini-2.5-pro"
+  end
+
   test "current WORKFLOW.md file is valid and complete" do
     original_workflow_path = Workflow.workflow_file_path()
     on_exit(fn -> Workflow.set_workflow_file_path(original_workflow_path) end)
@@ -130,6 +193,22 @@ defmodule SymphonyElixir.CoreTest do
     )
 
     assert Config.linear_assignee() == env_assignee
+  end
+
+  test "linear project slug resolves from LINEAR_PROJECT_SLUG env var" do
+    previous_linear_project_slug = System.get_env("LINEAR_PROJECT_SLUG")
+    env_slug = "test-project-slug"
+
+    on_exit(fn -> restore_env("LINEAR_PROJECT_SLUG", previous_linear_project_slug) end)
+    System.put_env("LINEAR_PROJECT_SLUG", env_slug)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_project_slug: nil,
+      tracker_api_token: "token",
+      codex_command: "/bin/sh app-server"
+    )
+
+    assert Config.linear_project_slug() == env_slug
   end
 
   test "workflow file path defaults to WORKFLOW.md in the current working directory when app env is unset" do

@@ -28,6 +28,15 @@ defmodule SymphonyElixir.Config do
   @default_max_concurrent_agents 10
   @default_agent_max_turns 20
   @default_max_retry_backoff_ms 300_000
+  @default_execution_backend "codex"
+  @default_execution_model nil
+  @default_execution_max_turns 20
+  @default_execution_timeout_ms 3_600_000
+  @default_claude_command "claude"
+  @default_claude_output_format "stream-json"
+  @default_claude_permission_mode "plan"
+  @default_gemini_command "gemini"
+  @default_gemini_model nil
   @default_codex_command "codex app-server"
   @default_codex_turn_timeout_ms 3_600_000
   @default_codex_read_timeout_ms 5_000
@@ -98,6 +107,53 @@ defmodule SymphonyElixir.Config do
                                    type: {:map, :string, :pos_integer},
                                    default: %{}
                                  ]
+                               ]
+                             ],
+                             execution: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 backend: [type: :string, default: @default_execution_backend],
+                                 model: [type: {:or, [:string, nil]}, default: @default_execution_model],
+                                 max_turns: [
+                                   type: :pos_integer,
+                                   default: @default_execution_max_turns
+                                 ],
+                                 timeout_ms: [
+                                   type: :pos_integer,
+                                   default: @default_execution_timeout_ms
+                                 ]
+                               ]
+                             ],
+                             claude: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 command: [type: :string, default: @default_claude_command],
+                                 output_format: [
+                                   type: :string,
+                                   default: @default_claude_output_format
+                                 ],
+                                 permission_mode: [
+                                   type: :string,
+                                   default: @default_claude_permission_mode
+                                 ],
+                                 allowed_tools: [
+                                   type: {:list, :string},
+                                   default: []
+                                 ],
+                                 disallowed_tools: [
+                                   type: {:list, :string},
+                                   default: []
+                                 ]
+                               ]
+                             ],
+                             gemini: [
+                               type: :map,
+                               default: %{},
+                               keys: [
+                                 command: [type: :string, default: @default_gemini_command],
+                                 model: [type: {:or, [:string, nil]}, default: @default_gemini_model]
                                ]
                              ],
                              codex: [
@@ -198,7 +254,10 @@ defmodule SymphonyElixir.Config do
 
   @spec linear_project_slug() :: String.t() | nil
   def linear_project_slug do
-    get_in(validated_workflow_options(), [:tracker, :project_slug])
+    validated_workflow_options()
+    |> get_in([:tracker, :project_slug])
+    |> resolve_env_value(System.get_env("LINEAR_PROJECT_SLUG"))
+    |> normalize_secret_value()
   end
 
   @spec linear_assignee() :: String.t() | nil
@@ -272,6 +331,61 @@ defmodule SymphonyElixir.Config do
   end
 
   def max_concurrent_agents_for_state(_state_name), do: max_concurrent_agents()
+
+  @spec execution_backend() :: String.t()
+  def execution_backend do
+    get_in(validated_workflow_options(), [:execution, :backend])
+  end
+
+  @spec execution_model() :: String.t() | nil
+  def execution_model do
+    get_in(validated_workflow_options(), [:execution, :model])
+  end
+
+  @spec execution_max_turns() :: pos_integer()
+  def execution_max_turns do
+    get_in(validated_workflow_options(), [:execution, :max_turns])
+  end
+
+  @spec execution_timeout_ms() :: pos_integer()
+  def execution_timeout_ms do
+    get_in(validated_workflow_options(), [:execution, :timeout_ms])
+  end
+
+  @spec claude_command() :: String.t()
+  def claude_command do
+    get_in(validated_workflow_options(), [:claude, :command])
+  end
+
+  @spec claude_output_format() :: String.t()
+  def claude_output_format do
+    get_in(validated_workflow_options(), [:claude, :output_format])
+  end
+
+  @spec claude_permission_mode() :: String.t()
+  def claude_permission_mode do
+    get_in(validated_workflow_options(), [:claude, :permission_mode])
+  end
+
+  @spec claude_allowed_tools() :: [String.t()]
+  def claude_allowed_tools do
+    get_in(validated_workflow_options(), [:claude, :allowed_tools])
+  end
+
+  @spec claude_disallowed_tools() :: [String.t()]
+  def claude_disallowed_tools do
+    get_in(validated_workflow_options(), [:claude, :disallowed_tools])
+  end
+
+  @spec gemini_command() :: String.t()
+  def gemini_command do
+    get_in(validated_workflow_options(), [:gemini, :command])
+  end
+
+  @spec gemini_model() :: String.t() | nil
+  def gemini_model do
+    get_in(validated_workflow_options(), [:gemini, :model])
+  end
 
   @spec codex_command() :: String.t()
   def codex_command do
@@ -450,6 +564,9 @@ defmodule SymphonyElixir.Config do
       polling: extract_polling_options(section_map(config, "polling")),
       workspace: extract_workspace_options(section_map(config, "workspace")),
       agent: extract_agent_options(section_map(config, "agent")),
+      execution: extract_execution_options(section_map(config, "execution")),
+      claude: extract_claude_options(section_map(config, "claude")),
+      gemini: extract_gemini_options(section_map(config, "gemini")),
       codex: extract_codex_options(section_map(config, "codex")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
@@ -486,6 +603,29 @@ defmodule SymphonyElixir.Config do
       :max_concurrent_agents_by_state,
       state_limits_value(Map.get(section, "max_concurrent_agents_by_state"))
     )
+  end
+
+  defp extract_execution_options(section) do
+    %{}
+    |> put_if_present(:backend, scalar_string_value(Map.get(section, "backend")))
+    |> put_if_present(:model, scalar_string_value(Map.get(section, "model")))
+    |> put_if_present(:max_turns, positive_integer_value(Map.get(section, "max_turns")))
+    |> put_if_present(:timeout_ms, positive_integer_value(Map.get(section, "timeout_ms")))
+  end
+
+  defp extract_claude_options(section) do
+    %{}
+    |> put_if_present(:command, command_value(Map.get(section, "command")))
+    |> put_if_present(:output_format, scalar_string_value(Map.get(section, "output_format")))
+    |> put_if_present(:permission_mode, scalar_string_value(Map.get(section, "permission_mode")))
+    |> put_if_present(:allowed_tools, csv_value(Map.get(section, "allowed_tools")))
+    |> put_if_present(:disallowed_tools, csv_value(Map.get(section, "disallowed_tools")))
+  end
+
+  defp extract_gemini_options(section) do
+    %{}
+    |> put_if_present(:command, command_value(Map.get(section, "command")))
+    |> put_if_present(:model, scalar_string_value(Map.get(section, "model")))
   end
 
   defp extract_codex_options(section) do

@@ -1,7 +1,9 @@
 # Symphony Elixir
 
-This directory contains the current Elixir/OTP implementation of Symphony, based on
-[`SPEC.md`](../SPEC.md) at the repository root.
+This directory contains the Elixir/OTP implementation of Symphony, based on
+[`SPEC.md`](../SPEC.md) at the repository root. This fork extends the upstream
+[openai/symphony](https://github.com/openai/symphony) implementation with multi-backend agent
+support.
 
 > [!WARNING]
 > Symphony Elixir is prototype software intended for evaluation only and is presented as-is.
@@ -15,13 +17,21 @@ This directory contains the current Elixir/OTP implementation of Symphony, based
 
 1. Polls Linear for candidate work
 2. Creates an isolated workspace per issue
-3. Launches Codex in [App Server mode](https://developers.openai.com/codex/app-server/) inside the
-   workspace
-4. Sends a workflow prompt to Codex
-5. Keeps Codex working on the issue until the work is done
+3. Routes the issue to a backend via `SymphonyElixir.AgentRouter` (label-based routing)
+4. Launches the selected backend agent inside the workspace
+5. Keeps the agent working on the issue until the work is done
 
-During app-server sessions, Symphony also serves a client-side `linear_graphql` tool so that repo
-skills can make raw Linear GraphQL calls.
+### Backends
+
+All backends implement the `SymphonyElixir.Backend` behaviour. Available backends:
+
+- **Claude** (`Backends.Claude`) -- Anthropic Claude via FLAME pools
+- **Codex** (`Backends.Codex`) -- OpenAI Codex in [App Server mode](https://developers.openai.com/codex/app-server/) (upstream default)
+- **Gemini** (`Backends.Gemini`) -- Google Gemini
+- **AppleSlicerAPI** (`Backends.AppleSlicerAPI`) -- REST API to apple-slicer for Acorn-managed execution
+
+During Codex app-server sessions, Symphony also serves a client-side `linear_graphql` tool so that
+repo skills can make raw Linear GraphQL calls.
 
 If a claimed issue moves to a terminal state (`Done`, `Closed`, `Cancelled`, or `Duplicate`),
 Symphony stops the active agent for that issue and cleans up matching workspaces.
@@ -56,7 +66,7 @@ mise exec -- elixir --version
 ## Run
 
 ```bash
-git clone https://github.com/openai/symphony
+git clone https://github.com/vinnie357/symphony
 cd symphony/elixir
 mise trust
 mise install
@@ -81,7 +91,7 @@ Optional flags:
 - `--port` also starts the Phoenix observability service (default: disabled)
 
 The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
-Codex session prompt.
+agent session prompt.
 
 Minimal example:
 
@@ -118,7 +128,7 @@ Notes:
 - Supported `codex.thread_sandbox` values: `read-only`, `workspace-write`, `danger-full-access`.
 - Supported `codex.turn_sandbox_policy.type` values: `dangerFullAccess`, `readOnly`,
   `externalSandbox`, `workspaceWrite`.
-- `agent.max_turns` caps how many back-to-back Codex turns Symphony will run in a single agent
+- `agent.max_turns` caps how many back-to-back turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
 - If the Markdown body is blank, Symphony uses a default prompt template that includes the issue
   identifier, title, and body.
