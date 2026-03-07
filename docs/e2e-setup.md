@@ -297,6 +297,87 @@ All repos use `.gitleaks.toml` for secret scanning. Run before pushing:
 container run -v $(pwd):/code zricethezav/gitleaks detect --source="/code" -v
 ```
 
+## Example test task
+
+Use this to verify the full chain works without needing Linear.
+
+### 1. Start services
+
+```bash
+# Acorn daemon (likely already running)
+acorn daemon status
+
+# Apple-slicer
+cd ~/github/apple-slicer && mix phx.server
+
+# (Optional) Symphony — not needed for this test, we use curl directly
+```
+
+### 2. Create a run
+
+```bash
+curl -s -X POST http://localhost:4000/api/symphony/runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "issue": {
+      "id": "test-count-100",
+      "identifier": "TEST-1",
+      "title": "Write a function that counts 1 to 100 in Elixir with tests",
+      "state": "Todo"
+    }
+  }'
+# Note the run "id" from the response
+```
+
+### 3. Create workspace and execute
+
+```bash
+# Create workspace
+mkdir -p /tmp/symphony-test-count100
+cd /tmp/symphony-test-count100 && git init && git commit --allow-empty -m "init"
+
+# Execute via Claude CLI (haiku for speed)
+claude --model haiku --dangerously-skip-permissions -p \
+  "Create an Elixir module Counter in lib/counter.ex with a function count/0 \
+   that returns a list of integers from 1 to 100. Also create test/counter_test.exs \
+   with ExUnit tests that verify: count/0 returns a list of 100 elements, the first \
+   element is 1, the last element is 100, and all elements are sequential. Write both files now."
+```
+
+### 4. Verify
+
+```bash
+# Add mix project + test helper
+cat > mix.exs << 'MIXEOF'
+defmodule Counter.MixProject do
+  use Mix.Project
+  def project, do: [app: :counter, version: "0.1.0", elixir: "~> 1.19"]
+end
+MIXEOF
+cat > test/test_helper.exs << 'HELPEOF'
+ExUnit.start()
+HELPEOF
+
+# Run tests
+mix test
+# Expected: 4 tests, 0 failures
+```
+
+### Expected output
+
+```
+lib/counter.ex     → Counter.count/0 returns Enum.to_list(1..100)
+test/counter_test.exs → 4 tests: length, first, last, sequential
+mix test             → 4 tests, 0 failures
+```
+
+### 5. Cleanup
+
+```bash
+rm -rf /tmp/symphony-test-count100
+# Stop apple-slicer (Ctrl-C or kill the process)
+```
+
 ## Quality gates
 
 ```bash
