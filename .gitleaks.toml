@@ -1,0 +1,22 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+# Allowlist for false positives
+[allowlist]
+description = "Allowlisted secrets"
+
+# Dev/test secret_key_base values - not real secrets
+regexes = [
+  '''secret_key_base.*dev''',
+  '''secret_key_base.*test''',
+]
+
+# Specific paths that contain example/dev secrets
+paths = [
+  '''config/dev\.exs''',
+  '''config/test\.exs''',
+  '''\.gitleaks\.toml$''',
+]
