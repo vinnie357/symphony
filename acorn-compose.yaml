@@ -8,11 +8,14 @@
 #   acorn logs -f apple-slicer         # follow apple-slicer logs
 #
 # Quickstart:
-#   1. Build images:
+#   1. Start acorn daemon (manages containers):
+#       acorn daemon start
+#
+#   2. Build images:
 #       cd ~/github/apple-slicer && container build -t apple-slicer:latest .
 #       cd ~/github/symphony/elixir && container build -t symphony:latest .
 #
-#   2. Set env and start:
+#   3. Set env and start:
 #       export LINEAR_API_KEY="lin_api_..."
 #       export ANTHROPIC_API_KEY="sk-ant-..."
 #       cd ~/github/symphony && acorn up
