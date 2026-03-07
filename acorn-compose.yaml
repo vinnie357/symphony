@@ -1,0 +1,106 @@
+# acorn-compose.yaml
+# Full Symphony orchestration stack: Symphony + Apple-Slicer + FLAME worker
+#
+# Usage:
+#   acorn up                           # start all services
+#   acorn up --profile with-worker     # include FLAME worker container
+#   acorn logs -f symphony             # follow symphony logs
+#   acorn logs -f apple-slicer         # follow apple-slicer logs
+#
+# Prerequisites:
+#   - Build apple-slicer image:
+#       cd ~/github/apple-slicer
+#       container build -t apple-slicer:latest .
+#   - Build FLAME worker images (for --profile with-worker):
+#       container build -t flame-runner-base:latest -f Containerfile.flame-runner-base .
+#       container build -t flame-runner-claude:latest -f Containerfile.flame-runner-claude .
+#   - Symphony runs on the host (no container image yet) — see "Host mode" below
+#
+# Host mode (recommended for development):
+#   # Terminal 1 — apple-slicer container via acorn
+#   acorn up apple-slicer
+#
+#   # Terminal 2 — symphony on host
+#   cd ~/github/symphony/elixir
+#   APPLE_SLICER_URL=http://apple-slicer.apple.local \
+#   LINEAR_API_KEY=lin_api_... \
+#   mix symphony.tui
+#
+# Environment:
+#   LINEAR_API_KEY       — Linear personal API token
+#   ANTHROPIC_API_KEY    — Anthropic API key for Claude CLI
+#   ACORN_SOCKET         — Daemon socket path (auto-mounted in containers)
+
+services:
+  # --- Apple-Slicer: FLAME-based execution engine ---
+  apple-slicer:
+    build:
+      context: ../apple-slicer
+    ports:
+      - "4000:4000"
+    environment:
+      PHX_HOST: "apple-slicer.apple.local"
+      PORT: "4000"
+      SECRET_KEY_BASE: "dev-only-not-a-real-secret-key-base-must-be-64-chars-long-padding"
+      DATABASE_PATH: "/app/data/apple_slicer.db"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ACORN_SOCKET: "/run/acorn/daemon.sock"
+      # Use real socket client instead of mock
+      ACORN_API_ADAPTER: "socket"
+    volumes:
+      - "apple-slicer-data:/app/data"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # --- Symphony: Linear-polling orchestrator ---
+  # NOTE: Symphony does not have a container image yet.
+  # Run on the host instead:
+  #   cd ~/github/symphony/elixir
+  #   APPLE_SLICER_URL=http://apple-slicer.apple.local mix symphony.tui
+  #
+  # When a Containerfile is added, uncomment this service:
+  #
+  # symphony:
+  #   build:
+  #     context: ./elixir
+  #   ports:
+  #     - "4001:4001"
+  #   environment:
+  #     LINEAR_API_KEY: "${LINEAR_API_KEY}"
+  #     ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+  #     APPLE_SLICER_URL: "http://apple-slicer:4000"
+  #     SYMPHONY_WORKSPACE_ROOT: "/workspaces"
+  #     PORT: "4001"
+  #   volumes:
+  #     - "symphony-workspaces:/workspaces"
+  #     - "./elixir/WORKFLOW.md:/app/WORKFLOW.md:ro"
+  #   depends_on:
+  #     apple-slicer:
+  #       condition: service_healthy
+
+  # --- FLAME worker: Claude CLI in a container (optional) ---
+  flame-worker:
+    image: flame-runner-claude:latest
+    profiles:
+      - with-worker
+    environment:
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      FLAME_PARENT: "apple-slicer@apple-slicer.apple.local"
+      RELEASE_NODE: "flame-worker@flame-worker.apple.local"
+      RELEASE_DISTRIBUTION: "name"
+    depends_on:
+      apple-slicer:
+        condition: service_healthy
+
+volumes:
+  apple-slicer-data:
+
+x-acorn:
+  proxy:
+    apple-slicer:
+      port: 4000
+    symphony:
+      port: 4001

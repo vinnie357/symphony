@@ -46,6 +46,9 @@ erl_crash.dump
 status.txt
 .codex/original-user-prompt.txt
 
+# Burrito build output.
+/burrito_out/
+
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
