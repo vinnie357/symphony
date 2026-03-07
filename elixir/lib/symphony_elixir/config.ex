@@ -211,6 +211,20 @@ defmodule SymphonyElixir.Config do
                                  port: [type: {:or, [:non_neg_integer, nil]}, default: nil],
                                  host: [type: :string, default: @default_server_host]
                                ]
+                             ],
+                             teams: [
+                               type:
+                                 {:list,
+                                  {:map,
+                                   [
+                                     name: [type: :string, required: true],
+                                     labels: [type: {:list, :string}, required: true],
+                                     backend: [type: {:or, [:string, nil]}, default: nil],
+                                     model: [type: {:or, [:string, nil]}, default: nil],
+                                     skills_repo: [type: {:or, [:string, nil]}, default: nil],
+                                     permission_mode: [type: {:or, [:string, nil]}, default: nil]
+                                   ]}},
+                               default: []
                              ]
                            )
 
@@ -570,7 +584,8 @@ defmodule SymphonyElixir.Config do
       codex: extract_codex_options(section_map(config, "codex")),
       hooks: extract_hooks_options(section_map(config, "hooks")),
       observability: extract_observability_options(section_map(config, "observability")),
-      server: extract_server_options(section_map(config, "server"))
+      server: extract_server_options(section_map(config, "server")),
+      teams: extract_teams_options(Map.get(config, "teams"))
     }
   end
 
@@ -657,6 +672,22 @@ defmodule SymphonyElixir.Config do
     |> put_if_present(:port, non_negative_integer_value(Map.get(section, "port")))
     |> put_if_present(:host, scalar_string_value(Map.get(section, "host")))
   end
+
+  defp extract_teams_options(nil), do: []
+  defp extract_teams_options(teams) when is_list(teams), do: Enum.map(teams, &extract_team/1)
+  defp extract_teams_options(_), do: []
+
+  defp extract_team(team) when is_map(team) do
+    %{}
+    |> put_if_present(:name, scalar_string_value(Map.get(team, "name")))
+    |> put_if_present(:labels, csv_value(Map.get(team, "labels")))
+    |> put_if_present(:backend, scalar_string_value(Map.get(team, "backend")))
+    |> put_if_present(:model, scalar_string_value(Map.get(team, "model")))
+    |> put_if_present(:skills_repo, scalar_string_value(Map.get(team, "skills_repo")))
+    |> put_if_present(:permission_mode, scalar_string_value(Map.get(team, "permission_mode")))
+  end
+
+  defp extract_team(_), do: %{}
 
   defp section_map(config, key) do
     case Map.get(config, key) do

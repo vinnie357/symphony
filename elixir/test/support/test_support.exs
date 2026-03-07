@@ -179,6 +179,7 @@ defmodule SymphonyElixir.TestSupport do
     gemini_model = Keyword.get(config, :gemini_model)
     server_port = Keyword.get(config, :server_port)
     server_host = Keyword.get(config, :server_host)
+    teams = Keyword.get(config, :teams)
     prompt = Keyword.get(config, :prompt)
 
     sections =
@@ -212,12 +213,16 @@ defmodule SymphonyElixir.TestSupport do
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         execution_yaml(execution_backend, execution_model, execution_max_turns, execution_timeout_ms),
         claude_yaml(
-          claude_command, claude_output_format, claude_permission_mode,
-          claude_allowed_tools, claude_disallowed_tools
+          claude_command,
+          claude_output_format,
+          claude_permission_mode,
+          claude_allowed_tools,
+          claude_disallowed_tools
         ),
         gemini_yaml(gemini_command, gemini_model),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),
+        teams_yaml(teams),
         "---",
         prompt
       ]
@@ -325,6 +330,40 @@ defmodule SymphonyElixir.TestSupport do
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
   end
+
+  defp teams_yaml(nil), do: nil
+  defp teams_yaml([]), do: "teams: []"
+
+  defp teams_yaml(teams) when is_list(teams) do
+    entries =
+      Enum.map_join(teams, "\n", fn team ->
+        fields =
+          [
+            "    name: #{yaml_value(Map.get(team, "name"))}",
+            team_list_field("labels", Map.get(team, "labels")),
+            team_optional_field("backend", Map.get(team, "backend")),
+            team_optional_field("model", Map.get(team, "model")),
+            team_optional_field("skills_repo", Map.get(team, "skills_repo")),
+            team_optional_field("permission_mode", Map.get(team, "permission_mode"))
+          ]
+          |> Enum.reject(&is_nil/1)
+          |> Enum.join("\n")
+
+        "  -\n#{fields}"
+      end)
+
+    "teams:\n#{entries}"
+  end
+
+  defp team_optional_field(_key, nil), do: nil
+  defp team_optional_field(key, value), do: "    #{key}: #{yaml_value(value)}"
+
+  defp team_list_field(key, values) when is_list(values) do
+    items = Enum.map_join(values, "\n", &"      - #{yaml_value(&1)}")
+    "    #{key}:\n#{items}"
+  end
+
+  defp team_list_field(_key, _), do: nil
 
   defp hook_entry(_name, nil), do: nil
 
