@@ -2,15 +2,17 @@ defmodule SymphonyElixir.ApiIntegrationTest do
   @moduledoc """
   Integration test for the full Symphony → AppleSlicerAPI flow.
 
-  Exercises AgentRunner with the AppleSlicerAPI backend against a mock HTTP
-  server (Bandit + Plug.Router), using Tracker.Memory for issue state.
+  Exercises the Orchestrator GenServer and AgentRunner with the AppleSlicerAPI
+  backend against a mock HTTP server (Bandit + Plug.Router), using
+  Tracker.Memory for issue state.
 
   Flow tested:
   1. Configure memory tracker with a Todo issue
   2. Start mock HTTP server simulating apple-slicer endpoints
-  3. AgentRunner dispatches to AppleSlicerAPI backend
-  4. Backend creates run, triggers turn, polls until completed
-  5. AgentRunner checks issue state and terminates
+  3. Orchestrator polls, finds candidate, dispatches via AgentRunner
+  4. AgentRunner resolves AppleSlicerAPI backend, creates run, triggers turn
+  5. Backend polls mock server until completed
+  6. AgentRunner finishes, Orchestrator records completion
   """
   use SymphonyElixir.TestSupport
 
@@ -18,6 +20,7 @@ defmodule SymphonyElixir.ApiIntegrationTest do
 
   alias SymphonyElixir.Backends.AppleSlicerAPI
   alias SymphonyElixir.Linear.Issue
+  alias SymphonyElixir.Orchestrator
 
   # ---------------------------------------------------------------------------
   # Mock apple-slicer HTTP server
@@ -212,8 +215,28 @@ defmodule SymphonyElixir.ApiIntegrationTest do
     )
   end
 
+  defp poll_until(fun, timeout_ms, interval_ms \\ 200) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_poll_until(fun, deadline, interval_ms)
+  end
+
+  defp do_poll_until(fun, deadline, interval_ms) do
+    if fun.() do
+      :ok
+    else
+      now = System.monotonic_time(:millisecond)
+
+      if now >= deadline do
+        flunk("poll_until timed out waiting for condition")
+      else
+        Process.sleep(interval_ms)
+        do_poll_until(fun, deadline, interval_ms)
+      end
+    end
+  end
+
   # ---------------------------------------------------------------------------
-  # Tests
+  # Tests: direct AppleSlicerAPI backend calls
   # ---------------------------------------------------------------------------
 
   describe "direct AppleSlicerAPI backend calls" do
@@ -392,6 +415,85 @@ defmodule SymphonyElixir.ApiIntegrationTest do
         File.rm_rf(workspace_root)
         :ets.delete(table)
         Supervisor.stop(server)
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Tests: Orchestrator GenServer dispatches through AppleSlicerAPI
+  # ---------------------------------------------------------------------------
+
+  describe "Orchestrator GenServer integration" do
+    @tag timeout: 30_000
+    test "orchestrator discovers Todo issue and dispatches via AppleSlicerAPI" do
+      {server, base_url, table} = start_mock_server()
+
+      issue = make_issue(%{state: "Todo"})
+      done_issue = %{issue | state: "Done"}
+
+      Application.put_env(:symphony_elixir, :memory_tracker_issues, [issue])
+      Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+      prev_url = System.get_env("APPLE_SLICER_URL")
+      System.put_env("APPLE_SLICER_URL", base_url)
+
+      workspace_root = Path.join(System.tmp_dir!(), "integ-orch-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(workspace_root)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        tracker_kind: "memory",
+        execution_backend: "apple-slicer-api",
+        poll_interval_ms: 100,
+        max_concurrent_agents: 1,
+        max_turns: 1
+      )
+
+      orchestrator_name = Module.concat(__MODULE__, :"OrchestratorInteg#{System.unique_integer([:positive])}")
+
+      try do
+        # Trap exits so the linked orchestrator GenServer doesn't kill us
+        Process.flag(:trap_exit, true)
+
+        log =
+          capture_log(fn ->
+            {:ok, orch_pid} = Orchestrator.start_link(name: orchestrator_name)
+
+            # Wait for the orchestrator to dispatch and the agent to complete.
+            poll_until(fn ->
+              state = :sys.get_state(orch_pid)
+              MapSet.member?(state.completed, issue.id) or map_size(state.retry_attempts) > 0
+            end, 15_000)
+
+            # Transition issue to Done so continuation retry skips re-dispatch
+            Application.put_env(:symphony_elixir, :memory_tracker_issues, [done_issue])
+
+            # Let the retry fire and the orchestrator see Done state
+            Process.sleep(2_000)
+
+            GenServer.stop(orch_pid, :normal)
+          end)
+
+        assert log =~ "apple-slicer run created"
+        assert log =~ "apple-slicer turn triggered"
+        assert log =~ "apple-slicer run completed"
+        assert log =~ "Dispatching issue to agent"
+        assert log =~ "Agent task completed"
+
+        [{:last_run_id, _run_id}] = :ets.lookup(table, :last_run_id)
+        [{:turn_count, turns}] = :ets.lookup(table, :turn_count)
+        assert turns >= 1
+      after
+        Process.flag(:trap_exit, false)
+        restore_env("APPLE_SLICER_URL", prev_url)
+        File.rm_rf(workspace_root)
+        :ets.delete(table)
+        Supervisor.stop(server)
+
+        case Process.whereis(orchestrator_name) do
+          pid when is_pid(pid) -> GenServer.stop(pid, :normal, 1_000)
+          _ -> :ok
+        end
       end
     end
   end
