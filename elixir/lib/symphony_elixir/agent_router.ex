@@ -2,8 +2,9 @@ defmodule SymphonyElixir.AgentRouter do
   @moduledoc """
   Resolves which Backend module to use for a given Linear issue based on its labels.
 
-  Users label Linear issues with an agent type (e.g., "claude", "codex", "gemini")
-  to route work to the appropriate backend. When no agent label is present, falls
+  When teams are configured in WORKFLOW.md, team-based routing takes priority:
+  issue labels are matched against team label sets first. If no team matches,
+  falls back to bare agent-label routing. When no agent label is present, falls
   back to `Config.execution_backend()` (default: "codex").
   """
 
@@ -19,16 +20,33 @@ defmodule SymphonyElixir.AgentRouter do
     "apple-slicer-api" => SymphonyElixir.Backends.AppleSlicerAPI
   }
 
-  @spec resolve_backend(Issue.t()) :: {:ok, module()} | {:error, {:unknown_backend, String.t()}}
+  @spec resolve_backend(Issue.t()) ::
+          {:ok, module(), map()} | {:error, {:unknown_backend, String.t()}}
   def resolve_backend(%Issue{labels: labels}) do
-    labels
-    |> find_agent_label()
-    |> Kernel.||(Config.execution_backend())
-    |> lookup_backend()
+    case Config.team_for_labels(labels) do
+      {:ok, team} ->
+        backend_name = team.backend || Config.execution_backend()
+
+        case lookup_backend(backend_name) do
+          {:ok, module} -> {:ok, module, team}
+          error -> error
+        end
+
+      :none ->
+        backend_name = find_agent_label(labels) || Config.execution_backend()
+
+        case lookup_backend(backend_name) do
+          {:ok, module} -> {:ok, module, %{}}
+          error -> error
+        end
+    end
   end
 
   def resolve_backend(_issue) do
-    lookup_backend(Config.execution_backend())
+    case lookup_backend(Config.execution_backend()) do
+      {:ok, module} -> {:ok, module, %{}}
+      error -> error
+    end
   end
 
   @spec known_agent_labels() :: [String.t()]

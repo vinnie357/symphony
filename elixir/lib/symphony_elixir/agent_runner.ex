@@ -50,8 +50,8 @@ defmodule SymphonyElixir.AgentRunner do
     max_turns = Keyword.get(opts, :max_turns, Config.agent_max_turns())
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
-    with {:ok, backend} <- AgentRouter.resolve_backend(issue),
-         {:ok, session} <- backend.start_session(issue, workspace, %{}) do
+    with {:ok, backend, team_config} <- AgentRouter.resolve_backend(issue),
+         {:ok, session} <- backend.start_session(issue, workspace, team_config) do
       send_codex_update(codex_update_recipient, issue, %{
         event: :backend_started,
         timestamp: DateTime.utc_now(),
