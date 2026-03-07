@@ -242,6 +242,14 @@ defmodule SymphonyElixir.Config do
           before_remove: String.t() | nil,
           timeout_ms: pos_integer()
         }
+  @type team :: %{
+          name: String.t(),
+          labels: [String.t()],
+          backend: String.t() | nil,
+          model: String.t() | nil,
+          skills_repo: String.t() | nil,
+          permission_mode: String.t() | nil
+        }
 
   @spec current_workflow() :: {:ok, workflow_payload()} | {:error, term()}
   def current_workflow do
@@ -487,6 +495,39 @@ defmodule SymphonyElixir.Config do
   @spec server_host() :: String.t()
   def server_host do
     get_in(validated_workflow_options(), [:server, :host])
+  end
+
+  @spec teams() :: [team()]
+  def teams do
+    validated_workflow_options()
+    |> get_in([:teams])
+    |> List.wrap()
+    |> Enum.map(&normalize_team/1)
+  end
+
+  @spec team_for_labels([String.t()]) :: {:ok, team()} | :none
+  def team_for_labels(issue_labels) when is_list(issue_labels) do
+    label_set = MapSet.new(issue_labels)
+
+    teams()
+    |> Enum.find(fn team ->
+      Enum.any?(team.labels, &MapSet.member?(label_set, &1))
+    end)
+    |> case do
+      nil -> :none
+      team -> {:ok, team}
+    end
+  end
+
+  defp normalize_team(team) when is_map(team) do
+    %{
+      name: Map.get(team, :name),
+      labels: Map.get(team, :labels, []),
+      backend: Map.get(team, :backend),
+      model: Map.get(team, :model),
+      skills_repo: Map.get(team, :skills_repo),
+      permission_mode: Map.get(team, :permission_mode)
+    }
   end
 
   @spec validate!() :: :ok | {:error, term()}
