@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Symphony.Web do
 
   ## Options
 
-    * `--port` - The port to listen on (default: 4000)
+    * `--port` - The port to listen on (default: `PORT` env var, or 4000)
   """
 
   @default_port 4000
@@ -21,7 +21,14 @@ defmodule Mix.Tasks.Symphony.Web do
   @impl Mix.Task
   def run(args) do
     {opts, _argv, _invalid} = OptionParser.parse(args, strict: [port: :integer])
-    port = Keyword.get(opts, :port, @default_port)
+
+    port =
+      Keyword.get_lazy(opts, :port, fn ->
+        case System.get_env("PORT") do
+          nil -> @default_port
+          val -> String.to_integer(val)
+        end
+      end)
 
     Application.put_env(:symphony_elixir, :mode, :web)
     Application.put_env(:symphony_elixir, :server_port_override, port)

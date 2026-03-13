@@ -25,10 +25,13 @@ defmodule SymphonyElixir.BackendsTest do
   setup do
     prev = Application.get_env(:symphony_elixir, :cmd_runner)
     Application.put_env(:symphony_elixir, :cmd_runner, MockCmd)
+
     on_exit(fn ->
-      if prev, do: Application.put_env(:symphony_elixir, :cmd_runner, prev),
-      else: Application.delete_env(:symphony_elixir, :cmd_runner)
+      if prev,
+        do: Application.put_env(:symphony_elixir, :cmd_runner, prev),
+        else: Application.delete_env(:symphony_elixir, :cmd_runner)
     end)
+
     :ok
   end
 

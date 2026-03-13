@@ -92,7 +92,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp send_worker_runtime_info(_recipient, _issue, _worker_host, _workspace), do: :ok
 
-  defp run_codex_turns(workspace, issue, codex_update_recipient, opts, worker_host) do
+  defp run_codex_turns(workspace, issue, codex_update_recipient, opts, _worker_host) do
     max_turns = Keyword.get(opts, :max_turns, Config.settings!().agent.max_turns)
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
@@ -102,7 +102,7 @@ defmodule SymphonyElixir.AgentRunner do
         event: :backend_started,
         timestamp: DateTime.utc_now(),
         backend_name: backend_display_name(backend),
-        execution_model: Config.execution_model()
+        execution_model: Config.settings!().execution.model
       })
 
       ctx = %{

@@ -23,12 +23,12 @@ defmodule SymphonyElixir.AgentRouter do
   def resolve_backend(%Issue{labels: labels}) do
     labels
     |> find_agent_label()
-    |> Kernel.||(Config.execution_backend())
+    |> Kernel.||(Config.settings!().execution.backend)
     |> lookup_backend()
   end
 
   def resolve_backend(_issue) do
-    lookup_backend(Config.execution_backend())
+    lookup_backend(Config.settings!().execution.backend)
   end
 
   @spec known_agent_labels() :: [String.t()]

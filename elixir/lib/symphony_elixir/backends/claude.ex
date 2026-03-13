@@ -27,10 +27,11 @@ defmodule SymphonyElixir.Backends.Claude do
     on_message = Keyword.get(opts, :on_message, fn _ -> :ok end)
     workspace = session.workspace
 
-    command = Config.claude_command()
-    permission_mode = Config.claude_permission_mode()
-    output_format = Config.claude_output_format()
-    model = Config.execution_model()
+    settings = Config.settings!()
+    command = settings.claude.command
+    permission_mode = settings.claude.permission_mode
+    output_format = settings.claude.output_format
+    model = settings.execution.model
 
     args =
       build_args(prompt, permission_mode, output_format, model)

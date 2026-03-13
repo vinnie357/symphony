@@ -26,8 +26,9 @@ defmodule SymphonyElixir.Backends.Gemini do
     on_message = Keyword.get(opts, :on_message, fn _ -> :ok end)
     workspace = session.workspace
 
-    command = Config.gemini_command()
-    model = Config.gemini_model()
+    settings = Config.settings!()
+    command = settings.gemini.command
+    model = settings.gemini.model
 
     args = build_args(prompt, model)
 

@@ -157,16 +157,12 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
           :ok
 
         {:ok, %Req.Response{status: status_code, body: body}} ->
-          Logger.warning(
-            "Unexpected response cancelling apple-slicer run: run_id=#{run_id} status=#{status_code} body=#{inspect(body)}"
-          )
+          Logger.warning("Unexpected response cancelling apple-slicer run: run_id=#{run_id} status=#{status_code} body=#{inspect(body)}")
 
           :ok
 
         {:error, reason} ->
-          Logger.warning(
-            "Failed to cancel apple-slicer run: run_id=#{run_id} error=#{inspect(reason)}"
-          )
+          Logger.warning("Failed to cancel apple-slicer run: run_id=#{run_id} error=#{inspect(reason)}")
 
           :ok
       end
@@ -343,9 +339,7 @@ defmodule SymphonyElixir.Backends.AppleSlicerAPI do
           handle_poll_result(session, run, on_message, poll_interval, deadline)
 
         {:error, reason} ->
-          Logger.warning(
-            "Failed to poll apple-slicer run status: run_id=#{session.run_id} error=#{inspect(reason)}"
-          )
+          Logger.warning("Failed to poll apple-slicer run status: run_id=#{session.run_id} error=#{inspect(reason)}")
 
           # Retry polling on transient errors
           do_poll(session, on_message, poll_interval, deadline)

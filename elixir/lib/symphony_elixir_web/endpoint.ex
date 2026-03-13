@@ -17,7 +17,7 @@ defmodule SymphonyElixirWeb.Endpoint do
   )
 
   if Mix.env() == :dev do
-    plug Tidewave
+    plug(Tidewave)
   end
 
   plug(Plug.RequestId)

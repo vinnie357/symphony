@@ -90,10 +90,11 @@ defmodule SymphonyElixir.CoreTest do
 
   test "execution config defaults to codex backend" do
     write_workflow_file!(Workflow.workflow_file_path())
-    assert Config.execution_backend() == "codex"
-    assert Config.execution_model() == nil
-    assert Config.execution_max_turns() == 20
-    assert Config.execution_timeout_ms() == 3_600_000
+    settings = Config.settings!()
+    assert settings.execution.backend == "codex"
+    assert settings.execution.model == nil
+    assert settings.execution.max_turns == 20
+    assert settings.execution.timeout_ms == 3_600_000
   end
 
   test "execution config parses from WORKFLOW.md" do
@@ -104,19 +105,21 @@ defmodule SymphonyElixir.CoreTest do
       execution_timeout_ms: 1_800_000
     )
 
-    assert Config.execution_backend() == "claude-cli"
-    assert Config.execution_model() == "claude-sonnet-4-20250514"
-    assert Config.execution_max_turns() == 10
-    assert Config.execution_timeout_ms() == 1_800_000
+    settings = Config.settings!()
+    assert settings.execution.backend == "claude-cli"
+    assert settings.execution.model == "claude-sonnet-4-20250514"
+    assert settings.execution.max_turns == 10
+    assert settings.execution.timeout_ms == 1_800_000
   end
 
   test "claude config defaults" do
     write_workflow_file!(Workflow.workflow_file_path())
-    assert Config.claude_command() == "claude"
-    assert Config.claude_output_format() == "stream-json"
-    assert Config.claude_permission_mode() == "plan"
-    assert Config.claude_allowed_tools() == []
-    assert Config.claude_disallowed_tools() == []
+    settings = Config.settings!()
+    assert settings.claude.command == "claude"
+    assert settings.claude.output_format == "stream-json"
+    assert settings.claude.permission_mode == "plan"
+    assert settings.claude.allowed_tools == []
+    assert settings.claude.disallowed_tools == []
   end
 
   test "claude config parses from WORKFLOW.md" do
@@ -128,17 +131,19 @@ defmodule SymphonyElixir.CoreTest do
       claude_disallowed_tools: ["Bash"]
     )
 
-    assert Config.claude_command() == "claude --model opus"
-    assert Config.claude_output_format() == "json"
-    assert Config.claude_permission_mode() == "dangerously-skip"
-    assert Config.claude_allowed_tools() == ["Read", "Write"]
-    assert Config.claude_disallowed_tools() == ["Bash"]
+    settings = Config.settings!()
+    assert settings.claude.command == "claude --model opus"
+    assert settings.claude.output_format == "json"
+    assert settings.claude.permission_mode == "dangerously-skip"
+    assert settings.claude.allowed_tools == ["Read", "Write"]
+    assert settings.claude.disallowed_tools == ["Bash"]
   end
 
   test "gemini config defaults" do
     write_workflow_file!(Workflow.workflow_file_path())
-    assert Config.gemini_command() == "gemini"
-    assert Config.gemini_model() == nil
+    settings = Config.settings!()
+    assert settings.gemini.command == "gemini"
+    assert settings.gemini.model == nil
   end
 
   test "gemini config parses from WORKFLOW.md" do
@@ -147,8 +152,9 @@ defmodule SymphonyElixir.CoreTest do
       gemini_model: "gemini-2.5-pro"
     )
 
-    assert Config.gemini_command() == "gemini --sandbox"
-    assert Config.gemini_model() == "gemini-2.5-pro"
+    settings = Config.settings!()
+    assert settings.gemini.command == "gemini --sandbox"
+    assert settings.gemini.model == "gemini-2.5-pro"
   end
 
   test "current WORKFLOW.md file is valid and complete" do
@@ -225,7 +231,7 @@ defmodule SymphonyElixir.CoreTest do
       codex_command: "/bin/sh app-server"
     )
 
-    assert Config.linear_project_slug() == env_slug
+    assert Config.settings!().tracker.project_slug == env_slug
   end
 
   test "workflow file path defaults to WORKFLOW.md in the current working directory when app env is unset" do
