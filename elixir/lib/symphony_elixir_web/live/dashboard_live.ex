@@ -132,7 +132,9 @@ defmodule SymphonyElixirWeb.DashboardLive do
               <table class="data-table data-table-running">
                 <colgroup>
                   <col style="width: 12rem;" />
+                  <col style="width: 9rem;" />
                   <col style="width: 8rem;" />
+                  <col style="width: 9rem;" />
                   <col style="width: 7.5rem;" />
                   <col style="width: 8.5rem;" />
                   <col />
@@ -141,7 +143,9 @@ defmodule SymphonyElixirWeb.DashboardLive do
                 <thead>
                   <tr>
                     <th>Issue</th>
+                    <th>Project</th>
                     <th>State</th>
+                    <th>Backend</th>
                     <th>Session</th>
                     <th>Runtime / turns</th>
                     <th>Codex update</th>
@@ -157,9 +161,24 @@ defmodule SymphonyElixirWeb.DashboardLive do
                       </div>
                     </td>
                     <td>
+                      <span class="muted"><%= entry.project_slug || "&mdash;" %></span>
+                    </td>
+                    <td>
                       <span class={state_badge_class(entry.state)}>
                         <%= entry.state %>
                       </span>
+                    </td>
+                    <td>
+                      <div class="detail-stack">
+                        <%= if entry.backend_name do %>
+                          <span><strong><%= entry.backend_name %></strong></span>
+                          <%= if entry.execution_model do %>
+                            <span class="muted"><%= entry.execution_model %></span>
+                          <% end %>
+                        <% else %>
+                          <span class="muted">&mdash;</span>
+                        <% end %>
+                      </div>
                     </td>
                     <td>
                       <div class="session-stack">

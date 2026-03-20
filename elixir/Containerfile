@@ -1,0 +1,92 @@
+# Symphony Elixir container image
+# Mix release build for Linux containers (Apple Container / Docker)
+#
+# Build: container build -t symphony:latest .
+# Run:   container run -p 4001:4001 \
+#          -e LINEAR_API_KEY=lin_api_... \
+#          -e ANTHROPIC_API_KEY=sk-ant-... \
+#          -e APPLE_SLICER_URL=http://apple-slicer:4000 \
+#          symphony:latest
+
+# --- Build stage ---
+FROM hexpm/elixir:1.19.5-erlang-28.3.2-debian-bookworm-20260223-slim AS builder
+
+RUN apt-get update -y && apt-get install -y build-essential git \
+    && apt-get clean && rm -f /var/lib/apt/lists/*_*
+
+WORKDIR /app
+
+RUN mix local.hex --force && mix local.rebar --force
+
+ENV MIX_ENV="prod"
+
+# Install dependencies first (cache layer)
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only $MIX_ENV
+RUN mkdir config
+
+# Compile-time config
+COPY config/config.exs config/
+RUN mix deps.compile
+
+# Application source
+COPY lib lib
+
+# Compile the release
+RUN mix compile
+
+# Runtime config (not compiled in)
+COPY config/runtime.exs config/
+
+# Release artifacts
+COPY rel rel
+COPY WORKFLOW.md ./
+RUN mix release symphony_elixir
+
+# --- Runtime stage ---
+FROM debian:bookworm-20260223-slim
+
+RUN apt-get update -y && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates \
+        curl gnupg git tini && \
+    apt-get clean && rm -f /var/lib/apt/lists/*_*
+
+# Install Node.js + Claude CLI (needed for claude backend)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -f /var/lib/apt/lists/*_*
+
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
+
+# Locale
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+WORKDIR /app
+RUN chown nobody /app
+
+# Workspace directory for agent workspaces
+RUN mkdir -p /workspaces && chown nobody /workspaces
+
+ENV MIX_ENV="prod"
+
+COPY --from=builder --chown=nobody:root /app/_build/prod/rel/symphony_elixir ./
+COPY --from=builder --chown=nobody:root /app/WORKFLOW.md ./
+
+USER nobody
+
+# Erlang distribution for potential clustering
+ENV RELEASE_DISTRIBUTION="name"
+ENV ELIXIR_ERL_OPTIONS="+K true +A 4"
+
+# Default config
+ENV PORT=4001
+ENV SYMPHONY_WORKSPACE_ROOT=/workspaces
+
+# Phoenix web + EPMD
+EXPOSE 4001 4369
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/bin/symphony_elixir", "start"]

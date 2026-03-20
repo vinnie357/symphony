@@ -47,6 +47,7 @@ defmodule SymphonyElixir.MixProject do
         plt_add_apps: [:mix]
       ],
       escript: escript(),
+      releases: releases(),
       aliases: aliases(),
       deps: deps()
     ]
@@ -74,8 +75,11 @@ defmodule SymphonyElixir.MixProject do
       {:yaml_elixir, "~> 2.12"},
       {:solid, "~> 1.2"},
       {:ecto, "~> 3.13"},
+      {:nimble_options, "~> 1.1"},
+      {:tidewave, "~> 0.5", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:burrito, "~> 1.5", only: :prod, runtime: false}
     ]
   end
 
@@ -84,6 +88,26 @@ defmodule SymphonyElixir.MixProject do
       setup: ["deps.get"],
       build: ["escript.build"],
       lint: ["specs.check", "credo --strict"]
+    ]
+  end
+
+  defp releases do
+    [
+      symphony_elixir: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent]
+      ],
+      symphony_burrito: [
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            macos_arm: [os: :darwin, cpu: :aarch64],
+            macos_intel: [os: :darwin, cpu: :x86_64],
+            linux: [os: :linux, cpu: :x86_64],
+            linux_arm: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
     ]
   end
 

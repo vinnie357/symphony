@@ -242,6 +242,67 @@ defmodule SymphonyElixir.Config.Schema do
     end
   end
 
+  defmodule Execution do
+    @moduledoc false
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    @primary_key false
+    embedded_schema do
+      field(:backend, :string, default: "codex")
+      field(:model, :string)
+      field(:max_turns, :integer, default: 20)
+      field(:timeout_ms, :integer, default: 3_600_000)
+    end
+
+    @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+    def changeset(schema, attrs) do
+      schema
+      |> cast(attrs, [:backend, :model, :max_turns, :timeout_ms], empty_values: [])
+      |> validate_number(:max_turns, greater_than: 0)
+      |> validate_number(:timeout_ms, greater_than: 0)
+    end
+  end
+
+  defmodule Claude do
+    @moduledoc false
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    @primary_key false
+    embedded_schema do
+      field(:command, :string, default: "claude")
+      field(:output_format, :string, default: "stream-json")
+      field(:permission_mode, :string, default: "plan")
+      field(:allowed_tools, {:array, :string}, default: [])
+      field(:disallowed_tools, {:array, :string}, default: [])
+    end
+
+    @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+    def changeset(schema, attrs) do
+      schema
+      |> cast(attrs, [:command, :output_format, :permission_mode, :allowed_tools, :disallowed_tools], empty_values: [])
+    end
+  end
+
+  defmodule Gemini do
+    @moduledoc false
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    @primary_key false
+    embedded_schema do
+      field(:command, :string, default: "gemini")
+      field(:model, :string)
+    end
+
+    @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+    def changeset(schema, attrs) do
+      schema
+      |> cast(attrs, [:command, :model], empty_values: [])
+    end
+  end
+
   defmodule Server do
     @moduledoc false
     use Ecto.Schema
@@ -267,6 +328,9 @@ defmodule SymphonyElixir.Config.Schema do
     embeds_one(:workspace, Workspace, on_replace: :update, defaults_to_struct: true)
     embeds_one(:worker, Worker, on_replace: :update, defaults_to_struct: true)
     embeds_one(:agent, Agent, on_replace: :update, defaults_to_struct: true)
+    embeds_one(:execution, Execution, on_replace: :update, defaults_to_struct: true)
+    embeds_one(:claude, Claude, on_replace: :update, defaults_to_struct: true)
+    embeds_one(:gemini, Gemini, on_replace: :update, defaults_to_struct: true)
     embeds_one(:codex, Codex, on_replace: :update, defaults_to_struct: true)
     embeds_one(:hooks, Hooks, on_replace: :update, defaults_to_struct: true)
     embeds_one(:observability, Observability, on_replace: :update, defaults_to_struct: true)
@@ -359,6 +423,9 @@ defmodule SymphonyElixir.Config.Schema do
     |> cast_embed(:workspace, with: &Workspace.changeset/2)
     |> cast_embed(:worker, with: &Worker.changeset/2)
     |> cast_embed(:agent, with: &Agent.changeset/2)
+    |> cast_embed(:execution, with: &Execution.changeset/2)
+    |> cast_embed(:claude, with: &Claude.changeset/2)
+    |> cast_embed(:gemini, with: &Gemini.changeset/2)
     |> cast_embed(:codex, with: &Codex.changeset/2)
     |> cast_embed(:hooks, with: &Hooks.changeset/2)
     |> cast_embed(:observability, with: &Observability.changeset/2)
@@ -369,6 +436,7 @@ defmodule SymphonyElixir.Config.Schema do
     tracker = %{
       settings.tracker
       | api_key: resolve_secret_setting(settings.tracker.api_key, System.get_env("LINEAR_API_KEY")),
+        project_slug: resolve_secret_setting(settings.tracker.project_slug, System.get_env("LINEAR_PROJECT_SLUG")),
         assignee: resolve_secret_setting(settings.tracker.assignee, System.get_env("LINEAR_ASSIGNEE"))
     }
 

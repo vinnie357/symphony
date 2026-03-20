@@ -1,11 +1,11 @@
 defmodule SymphonyElixir.AgentRunner do
   @moduledoc """
-  Executes a single Linear issue in its workspace with Codex.
+  Executes a single Linear issue in an isolated workspace using the
+  backend resolved from the issue's labels via `AgentRouter`.
   """
 
   require Logger
-  alias SymphonyElixir.Codex.AppServer
-  alias SymphonyElixir.{Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
+  alias SymphonyElixir.{AgentRouter, Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
 
   @type worker_host :: String.t() | nil
 
@@ -92,57 +92,80 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp send_worker_runtime_info(_recipient, _issue, _worker_host, _workspace), do: :ok
 
-  defp run_codex_turns(workspace, issue, codex_update_recipient, opts, worker_host) do
+  defp run_codex_turns(workspace, issue, codex_update_recipient, opts, _worker_host) do
     max_turns = Keyword.get(opts, :max_turns, Config.settings!().agent.max_turns)
     issue_state_fetcher = Keyword.get(opts, :issue_state_fetcher, &Tracker.fetch_issue_states_by_ids/1)
 
-    with {:ok, session} <- AppServer.start_session(workspace, worker_host: worker_host) do
+    with {:ok, backend} <- AgentRouter.resolve_backend(issue),
+         {:ok, session} <- backend.start_session(issue, workspace, %{}) do
+      send_codex_update(codex_update_recipient, issue, %{
+        event: :backend_started,
+        timestamp: DateTime.utc_now(),
+        backend_name: backend_display_name(backend),
+        execution_model: Config.settings!().execution.model
+      })
+
+      ctx = %{
+        backend: backend,
+        session: session,
+        workspace: workspace,
+        recipient: codex_update_recipient,
+        opts: opts,
+        issue_state_fetcher: issue_state_fetcher,
+        max_turns: max_turns
+      }
+
       try do
-        do_run_codex_turns(session, workspace, issue, codex_update_recipient, opts, issue_state_fetcher, 1, max_turns)
+        do_run_codex_turns(ctx, issue, 1)
       after
-        AppServer.stop_session(session)
+        backend.stop_session(session)
       end
     end
   end
 
-  defp do_run_codex_turns(app_session, workspace, issue, codex_update_recipient, opts, issue_state_fetcher, turn_number, max_turns) do
-    prompt = build_turn_prompt(issue, opts, turn_number, max_turns)
+  defp do_run_codex_turns(ctx, issue, turn_number) do
+    prompt = build_turn_prompt(issue, ctx.opts, turn_number, ctx.max_turns)
 
     with {:ok, turn_session} <-
-           AppServer.run_turn(
-             app_session,
+           ctx.backend.run_turn(
+             ctx.session,
              prompt,
-             issue,
-             on_message: codex_message_handler(codex_update_recipient, issue)
+             issue: issue,
+             on_message: codex_message_handler(ctx.recipient, issue)
            ) do
-      Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
+      Logger.info(
+        "Completed agent run for #{issue_context(issue)}" <>
+          " session_id=#{turn_session[:session_id]}" <>
+          " workspace=#{ctx.workspace} turn=#{turn_number}/#{ctx.max_turns}"
+      )
 
-      case continue_with_issue?(issue, issue_state_fetcher) do
-        {:continue, refreshed_issue} when turn_number < max_turns ->
-          Logger.info("Continuing agent run for #{issue_context(refreshed_issue)} after normal turn completion turn=#{turn_number}/#{max_turns}")
+      maybe_continue(ctx, issue, turn_number)
+    end
+  end
 
-          do_run_codex_turns(
-            app_session,
-            workspace,
-            refreshed_issue,
-            codex_update_recipient,
-            opts,
-            issue_state_fetcher,
-            turn_number + 1,
-            max_turns
-          )
+  defp maybe_continue(ctx, issue, turn_number) do
+    case continue_with_issue?(issue, ctx.issue_state_fetcher) do
+      {:continue, refreshed_issue} when turn_number < ctx.max_turns ->
+        Logger.info(
+          "Continuing agent run for #{issue_context(refreshed_issue)}" <>
+            " after normal turn completion turn=#{turn_number}/#{ctx.max_turns}"
+        )
 
-        {:continue, refreshed_issue} ->
-          Logger.info("Reached agent.max_turns for #{issue_context(refreshed_issue)} with issue still active; returning control to orchestrator")
+        do_run_codex_turns(ctx, refreshed_issue, turn_number + 1)
 
-          :ok
+      {:continue, refreshed_issue} ->
+        Logger.info(
+          "Reached agent.max_turns for #{issue_context(refreshed_issue)}" <>
+            " with issue still active; returning control to orchestrator"
+        )
 
-        {:done, _refreshed_issue} ->
-          :ok
+        :ok
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+      {:done, _refreshed_issue} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -220,6 +243,17 @@ defmodule SymphonyElixir.AgentRunner do
     state_name
     |> String.trim()
     |> String.downcase()
+  end
+
+  @backend_display_names %{
+    SymphonyElixir.Backends.Claude => "Claude",
+    SymphonyElixir.Backends.Codex => "Codex",
+    SymphonyElixir.Backends.Gemini => "Gemini",
+    SymphonyElixir.Backends.AppleSlicerAPI => "Apple Slicer"
+  }
+
+  defp backend_display_name(module) when is_atom(module) do
+    Map.get(@backend_display_names, module, inspect(module))
   end
 
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
